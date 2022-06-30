@@ -3,6 +3,7 @@ import joi from 'joi';
 import { MongoClient, ObjectId } from 'mongodb';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import bcrypt from 'bcrypt';
 
 dotenv.config();
 
@@ -31,7 +32,9 @@ app.post('/cadastrar', async (req, res) => {
     return res.sendStatus(400);
   }
 
-    await db.collection('usuarios').insertOne(usuario);
+    const passwordCriptografado = bcrypt.hashSync(usuario.password, 10)
+
+    await db.collection('usuarios').insertOne({...usuario, password: passwordCriptografado});
     res.status(200).send("Usuário cadastrado com sucesso!");
 
 })
