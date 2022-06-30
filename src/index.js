@@ -4,6 +4,7 @@ import { MongoClient, ObjectId } from 'mongodb';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
+import { v4 as uuid } from 'uuid';
 
 dotenv.config();
 
@@ -52,24 +53,66 @@ app.post('/login', async (req, res) => {
     if (error) {
       return res.sendStatus(400);
     }
-  
       const user = await db.collection("usuarios").findOne({email : usuario.email});
 
-      if(!user){
-          return res.sendStatus(404);
-      }
+      if(user && bcrypt.compareSync(usuario.password, user.password)){
+        
+        const token = uuid()
 
-      const verificaSenha = bcrypt.compareSync(usuario.password, user.password);
+        await db.collection('sessoes').insertOne({
+            token: token,
+            userId: user._id
+        });
+        res.status(200).send({ token });
 
-      if(!verificaSenha){
-          return res.status(401).send("Senha ou Email incorretos");
+      } else {
+        return res.status(404).send("Senha ou Email incorretos");
       }
+});
+
+app.post('/carteira', async (req, res) => {
+    const carteira = req.body;
+
+    const { authorization } = req.headers;
+    const token = authorization?.replace('Bearer ', '');
   
-      res.status(200).send("Usuário logado com sucesso!");
+    const carteiraSchema = joi.object({
+      valor: joi.string().required(),
+      descricao: joi.string().required()
+    });
+  
+    const { error } = carteiraSchema.validate(carteira);
+  
+    if (error) {
+      return res.sendStatus(422);
+    }
+  
+    const sessao = await db.collection('sessoes').findOne({token});
+
+    if(!sessao){
+        return res.sendStatus(401);
+    }
+
+    await db.collection('carteira').insertOne({...carteira, userId: sessao.userId});
+    res.status(200).send("Item adcionado à carteira com sucesso!");
   
   });
 
+app.get('/carteira', async (req, res) => {
+    const { authorization } = req.headers;
+    const token = authorization?.replace('Bearer ', '');
 
+    const sessao = await db.collection('sessoes').findOne({token});
+
+    if(!sessao){
+        return res.sendStatus(401);
+    }
+
+    const carteira = await db.collection('carteira').find({userId: new ObjectId(sessao.userId)}).toArray();
+
+    res.send(carteira);
+  
+  });
 
 const PORT = process.env.PORT || 5008;
 app.listen(PORT, () => console.log('Servidor rodou deboas'));
