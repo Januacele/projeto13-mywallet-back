@@ -37,7 +37,39 @@ app.post('/cadastrar', async (req, res) => {
     await db.collection('usuarios').insertOne({...usuario, password: passwordCriptografado});
     res.status(200).send("Usuário cadastrado com sucesso!");
 
-})
+});
+
+app.post('/login', async (req, res) => {
+    const usuario = req.body;
+  
+    const usuarioSchema = joi.object({
+      email: joi.string().email().required(),
+      password: joi.string().required()
+    });
+  
+    const { error } = usuarioSchema.validate(usuario);
+  
+    if (error) {
+      return res.sendStatus(400);
+    }
+  
+      const user = await db.collection("usuarios").findOne({email : usuario.email});
+
+      if(!user){
+          return res.sendStatus(404);
+      }
+
+      const verificaSenha = bcrypt.compareSync(usuario.password, user.password);
+
+      if(!verificaSenha){
+          return res.status(401).send("Senha ou Email incorretos");
+      }
+  
+      res.status(200).send("Usuário logado com sucesso!");
+  
+  });
+
+
 
 const PORT = process.env.PORT || 5008;
 app.listen(PORT, () => console.log('Servidor rodou deboas'));
