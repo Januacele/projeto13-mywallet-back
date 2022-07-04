@@ -5,7 +5,8 @@ import db from './../db.js';
 
 export async function getMovimentacao(req, res){
   const { authorization } = req.headers;
-  const token = authorization?.replace("Bearer", "").trim();
+  
+  const token = authorization ?.replace("Bearer ", "").trim();
 
     if(!token){
       return res.sendStatus(401);
@@ -36,7 +37,7 @@ export async function getMovimentacao(req, res){
 export async function addMovimentacao(req, res){
     
     const { authorization } = req.headers;
-    const token = authorization?.replace("Bearer", "").trim();
+    const token = authorization ?.replace("Bearer ", "").trim();
     if(!token){
       return res.sendStatus(401);
     }
