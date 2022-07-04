@@ -5,6 +5,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
 import { v4 as uuid } from 'uuid';
+import dayjs from 'dayjs';
 
 dotenv.config();
 
@@ -27,17 +28,37 @@ app.post('/cadastrar', async (req, res) => {
     password: joi.string().required()
   });
 
-  const { error } = usuarioSchema.validate(usuario);
+  const { error } = usuarioSchema.validate(usuario, { abortEarly: false });
 
   if (error) {
-    return res.sendStatus(400);
+    console.log(error.details);
+    return res.sendStatus(422);
   }
 
-    const passwordCriptografado = bcrypt.hashSync(usuario.password, 10)
+  try {
+    const emailCadastrado = await db.collection('usuarios').findOne( { email: usuario.email});
+    if(emailCadastrado){
+      res.status(409).send("Esse email já foi cadastrado, favor usar outro.");
+      return;
+    }
 
+    const passwordCriptografado = bcrypt.hashSync(usuario.password, 10);
     await db.collection('usuarios').insertOne({...usuario, password: passwordCriptografado});
-    res.status(200).send("Usuário cadastrado com sucesso!");
 
+    const salvarUsuario = await db.collection('usuarios').findOne({ password: passwordCriptografado });
+
+    const usuarioCarteira = {
+      userId: salvarUsuario._id,
+      movimentos: [],
+      balanco: 0
+    }
+    await db.collection('movimentos').insertOne(usuarioCarteira);
+
+    res.sendStatus(201);
+  } catch (e) {
+    res.status(500).send(`Erro ao registrar, ${e}`);
+  }
+  
 });
 
 app.post('/login', async (req, res) => {
@@ -71,32 +92,60 @@ app.post('/login', async (req, res) => {
 });
 
 app.post('/carteira', async (req, res) => {
-    const carteira = req.body;
-
+    
     const { authorization } = req.headers;
     const token = authorization?.replace('Bearer ', '');
-  
-    const carteiraSchema = joi.object({
-      valor: joi.string().required(),
-      descricao: joi.string().required()
-    });
-  
-    const { error } = carteiraSchema.validate(carteira);
-  
-    if (error) {
-      return res.sendStatus(422);
-    }
-  
-    const sessao = await db.collection('sessoes').findOne({token});
-
-    if(!sessao){
-        return res.sendStatus(401);
+    if(!token){
+      return res.sendStatus(401);
     }
 
-    await db.collection('carteira').insertOne({...carteira, userId: sessao.userId});
-    res.status(200).send("Item adcionado à carteira com sucesso!");
-  
+    let diaMes = dayjs().toDate();
+    diaMes = dayjs(diaMes).format("DD/MM");
+
+    try {
+
+      const sessao = await db.collection("sessoes").findOne({ token });
+
+      if(!sessao){
+       return res.sendStatus(401);
+      }
+
+      const carteira = req.body;
+
+      const carteiraSchema = joi.object({
+        type: joi.any().valid('entrada','saida').required(),
+        valor: joi.number().sign('positive').precision(2).required(),
+        descricao: joi.string().required()
+      });
+
+      const { error } = carteiraSchema.validate(carteira, { abortEarly: false });
+      
+      if (error) {
+        console.log(error.details);
+        return res.sendStatus(422);
+      }
+
+      let valor = carteira.valor;
+      if(carteira.type === 'saida'){
+        valor = (-1)*valor;
+      } 
+
+      const userId = sessao.userId;
+      const atualizacaoCarteira = {...carteira, date: diaMes};
+
+      await db.collection('carteira').updateOne(
+        {userId}, 
+        {
+          $push: { carteira: atualizacaoCarteira },
+          $inc: { valor: valor }
+        });
+      res.status(200).send("Item adcionado à carteira com sucesso!");
+      
+    } catch (error) {
+      res.sendStatus(500);
+    }
   });
+
 
 app.get('/carteira', async (req, res) => {
     const { authorization } = req.headers;
