@@ -1,6 +1,6 @@
 import express from 'express';
 import joi from 'joi';
-import { MongoClient, ObjectId } from 'mongodb';
+import { MongoClient } from 'mongodb';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import bcrypt from 'bcrypt';
@@ -28,7 +28,7 @@ app.post('/cadastrar', async (req, res) => {
     password: joi.string().required()
   });
 
-  const { error } = usuarioSchema.validate(usuario, { abortEarly: false });
+  const { error } = usuarioSchema.validate(usuario, { abortEarly: true });
 
   if (error) {
     console.log(error.details);
@@ -47,12 +47,12 @@ app.post('/cadastrar', async (req, res) => {
 
     const salvarUsuario = await db.collection('usuarios').findOne({ password: passwordCriptografado });
 
-    const usuarioCarteira = {
+    const usuarioBalanco = {
       userId: salvarUsuario._id,
       movimentos: [],
       balanco: 0
     }
-    await db.collection('movimentos').insertOne(usuarioCarteira);
+    await db.collection('movimentos').insertOne(usuarioBalanco);
 
     res.sendStatus(201);
   } catch (e) {
@@ -62,39 +62,53 @@ app.post('/cadastrar', async (req, res) => {
 });
 
 app.post('/login', async (req, res) => {
-    const usuario = req.body;
+    const login = req.body;
   
-    const usuarioSchema = joi.object({
+    const loginSchema = joi.object({
       email: joi.string().email().required(),
       password: joi.string().required()
     });
   
-    const { error } = usuarioSchema.validate(usuario);
+    const { error } = loginSchema.validate(login, { abortEarly: true });
   
     if (error) {
-      return res.sendStatus(400);
+      return res.sendStatus(422);
     }
-      const user = await db.collection("usuarios").findOne({email : usuario.email});
+    
+    try {
+      const user = await db.collection("usuarios").findOne({ email : login.email});
 
-      if(user && bcrypt.compareSync(usuario.password, user.password)){
+      if(user && bcrypt.compareSync(login.password, user.password)){
         
         const token = uuid()
 
         await db.collection('sessoes').insertOne({
-            token: token,
+            token,
             userId: user._id
         });
-        res.status(200).send({ token });
+
+        const response = {
+          token,
+          name: user.name
+      };
+
+        res.status(200).send({ response });
 
       } else {
         return res.status(404).send("Senha ou Email incorretos");
       }
+
+    } catch (error) {
+        res.sendStatus(500);
+        console.log("Erro ao fazer login");
+    }
 });
+
 
 app.post('/carteira', async (req, res) => {
     
     const { authorization } = req.headers;
-    const token = authorization?.replace('Bearer ', '');
+    const token = authorization?.replace("Bearer", "").trim();
     if(!token){
       return res.sendStatus(401);
     }
@@ -110,34 +124,36 @@ app.post('/carteira', async (req, res) => {
        return res.sendStatus(401);
       }
 
-      const carteira = req.body;
+      const movimentacao = req.body;
 
-      const carteiraSchema = joi.object({
+      const movimentacaoSchema = joi.object({
         type: joi.any().valid('entrada','saida').required(),
         valor: joi.number().sign('positive').precision(2).required(),
         descricao: joi.string().required()
       });
 
-      const { error } = carteiraSchema.validate(carteira, { abortEarly: false });
+      const { error } = movimentacaoSchema.validate(movimentacao, { abortEarly: true });
       
       if (error) {
         console.log(error.details);
-        return res.sendStatus(422);
+        res.sendStatus(422);
+        return;
       }
 
-      let valor = carteira.valor;
-      if(carteira.type === 'saida'){
+      let valor = movimentacao.valor;
+      if(movimentacao.type === 'saida'){
         valor = (-1)*valor;
+        return;
       } 
 
       const userId = sessao.userId;
-      const atualizacaoCarteira = {...carteira, date: diaMes};
+      const novaMovimentacao = {...movimentacao, date: diaMes};
 
-      await db.collection('carteira').updateOne(
+      await db.collection("movimentacoes").updateOne(
         {userId}, 
         {
-          $push: { carteira: atualizacaoCarteira },
-          $inc: { valor: valor }
+          $push: { movimentacoes: novaMovimentacao },
+          $inc: { balanco: valor }
         });
       res.status(200).send("Item adcionado à carteira com sucesso!");
       
@@ -148,18 +164,23 @@ app.post('/carteira', async (req, res) => {
 
 
 app.get('/carteira', async (req, res) => {
-    const { authorization } = req.headers;
-    const token = authorization?.replace('Bearer ', '');
+  const { authorization } = req.headers;
+  const token = authorization?.replace("Bearer", "").trim();
 
-    const sessao = await db.collection('sessoes').findOne({token});
-
-    if(!sessao){
-        return res.sendStatus(401);
+    if(!token){
+      return res.sendStatus(401);
     }
 
-    const carteira = await db.collection('carteira').find({userId: new ObjectId(sessao.userId)}).toArray();
+    try {
+      const sessao = await db.collection('sessoes').findOne({ token });
 
-    res.send(carteira);
+      if(!sessao){
+          return res.sendStatus(401);
+      }
+
+    } catch (error) {
+      res.sendStatus(500);
+    }
   
   });
 
