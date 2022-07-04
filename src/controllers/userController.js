@@ -2,6 +2,37 @@ import dayjs from 'dayjs';
 import joi from 'joi';
 import db from './../db.js';
 
+
+export async function getMovimentacao(req, res){
+  const { authorization } = req.headers;
+  const token = authorization?.replace("Bearer", "").trim();
+
+    if(!token){
+      return res.sendStatus(401);
+    }
+
+    try {
+      const sessao = await db.collection('sessoes').findOne({ token });
+
+      if(!sessao){
+          return res.sendStatus(401);
+      }
+
+      const movimentos = await db.collection("movimentos").findOne({ userId: sessao.userId });
+
+      if (movimentos) {
+          delete movimentos.userId;
+          res.send(movimentos);
+      }
+
+    } catch (error) {
+      res.sendStatus(500);
+    }
+  
+  }
+
+
+
 export async function addMovimentacao(req, res){
     
     const { authorization } = req.headers;
@@ -38,10 +69,7 @@ export async function addMovimentacao(req, res){
       }
 
       let valor = movimentacao.valor;
-      if(movimentacao.type === 'saida'){
-        valor = (-1)*valor;
-        return;
-      } 
+      if(movimentacao.type === 'saida') valor = (-1)*valor;
 
       const userId = sessao.userId;
       const novaMovimentacao = {...movimentacao, date: diaMes};
@@ -60,23 +88,3 @@ export async function addMovimentacao(req, res){
   }
 
 
-  export async function getMovimentacao(req, res){
-    const { authorization } = req.headers;
-    const token = authorization?.replace("Bearer", "").trim();
-  
-      if(!token){
-        return res.sendStatus(401);
-      }
-  
-      try {
-        const sessao = await db.collection('sessoes').findOne({ token });
-  
-        if(!sessao){
-            return res.sendStatus(401);
-        }
-  
-      } catch (error) {
-        res.sendStatus(500);
-      }
-    
-    }

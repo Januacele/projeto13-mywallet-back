@@ -4,15 +4,15 @@ import joi from 'joi';
 import db from './../db.js';
 
 export async function cadastrar(req, res){
-    const usuario = req.body;
+    const user = req.body;
   
-    const usuarioSchema = joi.object({
+    const userSchema = joi.object({
       name: joi.string().required(),
       email: joi.string().email().required(),
       password: joi.string().required()
     });
   
-    const { error } = usuarioSchema.validate(usuario, { abortEarly: true });
+    const { error } = userSchema.validate(user, { abortEarly: false });
   
     if (error) {
       console.log(error.details);
@@ -20,14 +20,14 @@ export async function cadastrar(req, res){
     }
   
     try {
-      const emailCadastrado = await db.collection('usuarios').findOne( { email: usuario.email});
+      const emailCadastrado = await db.collection('usuarios').findOne( { email: user.email});
       if(emailCadastrado){
         res.status(409).send("Esse email já foi cadastrado, favor usar outro.");
         return;
       }
   
-      const passwordCriptografado = bcrypt.hashSync(usuario.password, 10);
-      await db.collection("usuarios").insertOne({...usuario, password: passwordCriptografado});
+      const passwordCriptografado = bcrypt.hashSync(user.password, 10);
+      await db.collection("usuarios").insertOne({...user, password: passwordCriptografado});
   
       const salvarUsuario = await db.collection("usuarios").findOne({ password: passwordCriptografado });
   
@@ -41,10 +41,9 @@ export async function cadastrar(req, res){
       res.sendStatus(201);
     } catch (error) {
       res.status(500).send("Erro ao registrar");
-    }
+    };
     
   }
-
 
 
   export async function login(req, res) {

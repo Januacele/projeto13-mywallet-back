@@ -16,5 +16,5 @@ app.use(cors());
 app.use(authRout);
 app.use(userRouter);
 
-const PORT = process.env.PORT || 5008;
+const PORT = process.env.PORT;
 app.listen(PORT, () => console.log('Servidor rodou deboas'));
