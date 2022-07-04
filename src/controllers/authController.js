@@ -12,12 +12,13 @@ export async function cadastrar(req, res){
       password: joi.string().required()
     });
   
-    const { error } = userSchema.validate(user, { abortEarly: false });
+    const validation = userSchema.validate(user, { abortEarly: true });
   
-    if (error) {
-      console.log(error.details);
-      return res.sendStatus(422);
-    }
+    if (validation.error) {
+      console.log(validation.error.details);
+      res.sendStatus(422);
+      return;
+    };
   
     try {
       const emailCadastrado = await db.collection('usuarios').findOne( { email: user.email});
@@ -54,9 +55,9 @@ export async function cadastrar(req, res){
       password: joi.string().required()
     });
   
-    const { error } = loginSchema.validate(login, { abortEarly: true });
+    const validation = loginSchema.validate(login, { abortEarly: true });
   
-    if (error) {
+    if (validation.error) {
       return res.sendStatus(422);
     }
     

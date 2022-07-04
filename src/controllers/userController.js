@@ -60,9 +60,9 @@ export async function addMovimentacao(req, res){
         descricao: joi.string().required()
       });
 
-      const { error } = movimentacaoSchema.validate(movimentacao, { abortEarly: true });
+      const validation = movimentacaoSchema.validate(movimentacao, { abortEarly: true });
       
-      if (error) {
+      if (validation.error) {
         console.log(error.details);
         res.sendStatus(422);
         return;
